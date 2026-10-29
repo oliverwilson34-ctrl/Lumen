@@ -6,8 +6,8 @@ const PROVIDERS = {
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
     keyHint: 'Get free key at aistudio.google.com/apikey',
     models: [
-      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash (recommended)' },
-      { id: 'gemini-2.0-flash', label: 'gemini-2.0-flash' },
+      { id: 'gemini-3.8-flash', label: 'gemini-3.8-flash (recommended)' },
+      { id: 'gemini-2.5-flash', label: 'gemini-2.5-flash' },
       { id: 'gemini-2.5-flash-lite', label: 'gemini-2.5-flash-lite' },
       { id: 'gemini-2.5-pro', label: 'gemini-2.5-pro' }
     ]
@@ -82,7 +82,7 @@ let activeTab = 'characters';
 let tempRpgChars = [];
 let apiKey = localStorage.getItem('lumen_api_key') || '';
 let selectedProvider = localStorage.getItem('lumen_provider') || 'gemini';
-let selectedModel = localStorage.getItem('lumen_model') || 'gemini-2.5-flash';
+let selectedModel = localStorage.getItem('lumen_model') || 'gemini-3.8-flash';
 
 const characterListEl = document.getElementById('character-list');
 const rpgListEl = document.getElementById('rpg-list');
@@ -267,7 +267,7 @@ function renderMessages() {
 
 function escapeHtml(t) {
   if (!t) return '';
-  return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/\n/g,'<br>');
+  return String(t).replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>').replace(/"/g,'"').replace(/\n/g,'<br>');
 }
 
 async function sendMessage() {
@@ -313,7 +313,6 @@ async function generateReply(item, history) {
   const data = item.data;
   let systemPrompt = '';
 
-  // Full NSFW allowed system instructions
   const nsfwRules = `
 IMPORTANT RULES:
 - This is a private adult roleplay. You are allowed and expected to engage in full explicit NSFW content including sexual acts, graphic descriptions, kinks, and mature themes when the user initiates or continues them.
@@ -324,30 +323,11 @@ IMPORTANT RULES:
 - All characters are adults (18+).`;
 
   if (item.type === 'character') {
-    systemPrompt = `You are ${data.name}.
-Gender: ${data.gender || 'Unknown'}
-Intro: ${data.intro || ''}
-Background / Personality: ${data.background || ''}
-Dialogue style: ${data.dialogue || ''}
-
-${nsfwRules}`;
+    systemPrompt = `You are ${data.name}.\nGender: ${data.gender || 'Unknown'}\nIntro: ${data.intro || ''}\nBackground / Personality: ${data.background || ''}\nDialogue style: ${data.dialogue || ''}\n\n${nsfwRules}`;
   } else {
     const involved = characters.filter(c => (data.characterIds || []).includes(c.id));
     const charDescriptions = involved.map(c => `- ${c.name} (${c.gender}): ${c.intro || ''} | Personality: ${c.background || c.dialogue || 'N/A'}`).join('\n');
-    systemPrompt = `You are narrating a multi-character roleplay scenario called "${data.name}".
-
-Scenario description: ${data.description || ''}
-Background / Rules: ${data.background || ''}
-
-Characters present:
-${charDescriptions}
-
-When responding, have 1 or 2 characters speak/react. Format each character's part exactly like this:
-
-**CharacterName**:
-Their dialogue and actions.
-
-${nsfwRules}`;
+    systemPrompt = `You are narrating a multi-character roleplay scenario called "${data.name}".\n\nScenario description: ${data.description || ''}\nBackground / Rules: ${data.background || ''}\n\nCharacters present:\n${charDescriptions}\n\nWhen responding, have 1 or 2 characters speak/react. Format each character's part exactly like this:\n\n**CharacterName**:\nTheir dialogue and actions.\n\n${nsfwRules}`;
   }
 
   const messages = [
@@ -375,7 +355,7 @@ ${nsfwRules}`;
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || ('API error ' + res.status));
+    throw new Error((err.error && (err.error.message || err.error.status)) || ('API error ' + res.status));
   }
 
   const json = await res.json();
@@ -501,67 +481,76 @@ document.getElementById('home-create-char').onclick = openModal;
 document.getElementById('close-modal').onclick = closeModal;
 document.getElementById('cancel-create').onclick = closeModal;
 
+document.getElementById('create-form').onsubmit = (e) => {
+  e.preventDefault();
+  createCharacter({
+    avatar: document.getElementById('char-avatar').value || '\u25d0',
+    name: document.getElementById('char-name').value.trim(),
+    gender: document.querySelector('input[name="gender"]:checked')?.value || 'Male',
+    intro: document.getElementById('char-intro').value.trim(),
+    greeting: document.getElementById('char-greeting').value.trim(),
+    permission: document.querySelector('input[name="permission"]:checked')?.value || 'Public',
+    tags: document.getElementById('char-tags').value.trim(),
+    background: document.getElementById('char-background').value.trim(),
+    dialogue: document.getElementById('char-dialogue').value.trim()
+  });
+};
+
 document.getElementById('create-rpg-btn').onclick = openRpgModal;
 document.getElementById('home-create-rpg').onclick = openRpgModal;
 document.getElementById('close-rpg-modal').onclick = closeRpgModal;
 document.getElementById('cancel-rpg').onclick = closeRpgModal;
 
-document.querySelector('.logo').onclick = showHome;
-
-document.getElementById('create-form').onsubmit = (e) => {
-  e.preventDefault();
-  createCharacter({
-    name: document.getElementById('char-name').value.trim(),
-    gender: document.querySelector('input[name="gender"]:checked')?.value || 'Male',
-    intro: document.getElementById('char-intro').value.trim(),
-    greeting: document.getElementById('char-greeting').value.trim(),
-    background: document.getElementById('char-background').value.trim(),
-    tags: document.getElementById('char-tags').value.trim(),
-    dialogue: document.getElementById('char-dialogue').value.trim(),
-    permission: document.querySelector('input[name="permission"]:checked')?.value || 'Public',
-    avatar: document.getElementById('char-avatar').value.trim() || '\u25d0'
-  });
+document.getElementById('add-char-to-rpg').onclick = () => {
+  const id = document.getElementById('rpg-char-select').value;
+  if (!id || tempRpgChars.includes(id)) return;
+  tempRpgChars.push(id);
+  renderTempRpgChars();
 };
 
 document.getElementById('rpg-form').onsubmit = (e) => {
   e.preventDefault();
-  if (tempRpgChars.length < 2) { alert('Please add at least 2 characters.'); return; }
+  if (tempRpgChars.length < 2) {
+    alert('Please add at least 2 characters.');
+    return;
+  }
   createRpg({
+    avatar: document.getElementById('rpg-avatar').value || '\ud83c\udfae',
     name: document.getElementById('rpg-name').value.trim(),
     gender: document.querySelector('input[name="rpg-gender"]:checked')?.value || 'Male',
     description: document.getElementById('rpg-description').value.trim(),
     opening: document.getElementById('rpg-opening').value.trim(),
     background: document.getElementById('rpg-background').value.trim(),
     tags: document.getElementById('rpg-tags').value.trim(),
-    visibility: document.querySelector('input[name="rpg-visibility"]:checked')?.value || 'Public',
-    avatar: document.getElementById('rpg-avatar').value.trim() || '\ud83c\udfae',
-    greeting: document.getElementById('rpg-opening').value.trim()
+    permission: document.querySelector('input[name="rpg-visibility"]:checked')?.value || 'Public'
   });
 };
 
-document.getElementById('add-char-to-rpg').onclick = () => {
-  const id = document.getElementById('rpg-char-select').value;
-  if (id && !tempRpgChars.includes(id)) {
-    tempRpgChars.push(id);
-    renderTempRpgChars();
-  }
-  document.getElementById('rpg-char-select').value = '';
-};
+document.getElementById('back-btn').onclick = showHome;
+document.querySelector('.logo').onclick = showHome;
 
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => switchTab(t.dataset.tab));
-sendBtn.onclick = sendMessage;
-messageInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
-messageInput.oninput = () => {
-  messageInput.style.height = 'auto';
-  messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
-};
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => switchTab(tab.dataset.tab);
+});
+
 searchInput.oninput = () => {
   if (activeTab === 'characters') renderCharacterList(searchInput.value);
   else renderRpgList(searchInput.value);
 };
-document.getElementById('back-btn').onclick = showHome;
 
+sendBtn.onclick = sendMessage;
+messageInput.onkeydown = (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+};
+messageInput.oninput = () => {
+  messageInput.style.height = 'auto';
+  messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+};
+
+// Init
 loadData();
-renderFeatured();
-renderCharacterList();
-renderRpgList();
+fillModels();
+showHome();
